@@ -1,0 +1,28 @@
+name: Aircrack-ng WiFi Cracking  
+
+on:  
+  push:  
+    branches:  
+      - main  
+
+jobs:  
+  crack_handshake:  
+    runs-on: ubuntu-latest  
+    steps:  
+      - name: Checkout repository  
+        uses: actions/checkout@v2  
+      - name: Install aircrack-ng  
+        run: |  
+          sudo apt-get update  
+          sudo apt-get install -y aircrack-ng  
+      - name: Download weakpass dictionary  
+        run: |  
+          curl -L -o weakpass.zip https://example.com/weakpass.zip  
+          unzip weakpass.zip -d ./weakpass  
+      - name: Crack WiFi handshakes  
+        run: |  
+          aircrack-ng -w ./weakpass/ -b <BSSID> <path_to_handshake_file>  
+          
+          echo "Results:"  
+      - name: Show progress  
+        run: echo 'Cracking in progress...'; sleep 10; echo 'Check completed.'  
