@@ -17,8 +17,8 @@ jobs:
           sudo apt-get install -y aircrack-ng  
       - name: Download weakpass dictionary  
         run: |  
-          curl -L -o weakpass.zip https://example.com/weakpass.zip  
-          unzip weakpass.zip -d ./weakpass  
+          curl -L -o weakpass_4.merged.txt.7z https://download.weakpass.com/wordlists/2025/weakpass_4.merged.txt.7z
+          unzip weakpass_4.merged.txt.7z -d ./weakpass  
       - name: Crack WiFi handshakes  
         run: |  
           aircrack-ng -w ./weakpass/ -b <BSSID> <path_to_handshake_file>  
