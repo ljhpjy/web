@@ -18,7 +18,7 @@ jobs:
       - name: Download weakpass dictionary  
         run: |  
           curl -L -o weakpass_4.merged.txt.7z https://download.weakpass.com/wordlists/2025/weakpass_4.merged.txt.7z
-          7z x weakpass_4.merged.txt.7z -d ./weakpass  
+          7z x weakpass_4.merged.txt.7z -o ./weakpass  
       - name: Crack WiFi handshakes  
         run: |  
           aircrack-ng -w ./weakpass/ -b <BSSID> <path_to_handshake_file>  
