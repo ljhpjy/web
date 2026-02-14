@@ -1,28 +1,79 @@
-name: Aircrack-ng WiFi Cracking  
+name: Aircrack-ng WiFi Cracking
 
-on:  
-  push:  
-    branches:  
-      - main  
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
 
-jobs:  
-  crack_handshake:  
-    runs-on: ubuntu-latest  
-    steps:  
-      - name: Checkout repository  
-        uses: actions/checkout@v2  
-      - name: Install aircrack-ng  
-        run: |  
-          sudo apt-get update  
-          sudo apt-get install -y aircrack-ng  
-      - name: Download weakpass dictionary  
-        run: |  
-          curl -L -o weakpass_4.merged.txt.7z https://download.weakpass.com/wordlists/2025/weakpass_4.merged.txt.7z
-          7z x weakpass_4.merged.txt.7z -o./weakpass  
-      - name: Crack WiFi handshakes  
-        run: |  
-          aircrack-ng -w ./weakpass/ -b <BSSID> <path_to_handshake_file>  
-          
-          echo "Results:"  
-      - name: Show progress  
-        run: echo 'Cracking in progress...'; sleep 10; echo 'Check completed.'  
+jobs:
+  crack_handshake:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y aircrack-ng p7zip-full
+
+      - name: Download weakpass dictionary
+        run: |
+          echo "📥 Downloading WeakPass dictionary..."
+          wget -q --show-progress https://download.weakpass.com/wordlists/2025/weakpass_4.merged.txt.7z
+          echo "✅ Download completed"
+
+      - name: Extract weakpass dictionary
+        run: |
+          echo "📦 Extracting dictionary..."
+          7z x weakpass_4.merged.txt.7z -o. -y
+          echo "✅ Extraction completed"
+          ls -lh weakpass_4.merged.txt
+
+      - name: Crack WiFi-01 handshake
+        id: crack1
+        continue-on-error: true
+        run: |
+          echo "🔓 Starting crack for hs/wifi-01.cap..."
+          echo "Current progress and estimated time will be displayed below:"
+          aircrack-ng -w weakpass_4.merged.txt hs/wifi-01.cap -l results_wifi01.txt
+          echo "✅ Completed"
+          if [ -f results_wifi01.txt ]; then
+            echo "📊 WiFi-01 Results:"
+            cat results_wifi01.txt
+          fi
+
+      - name: Crack WiFi-02 handshake
+        id: crack2
+        continue-on-error: true
+        run: |
+          echo "🔓 Starting crack for hs/wifi-02.cap..."
+          echo "Current progress and estimated time will be displayed below:"
+          aircrack-ng -w weakpass_4.merged.txt hs/wifi-02.cap -l results_wifi02.txt
+          echo "✅ Completed"
+          if [ -f results_wifi02.txt ]; then
+            echo "📊 WiFi-02 Results:"
+            cat results_wifi02.txt
+          fi
+
+      - name: Show final results
+        if: always()
+        run: |
+          echo "🎉 ===== FINAL CRACKING RESULTS ====="
+          echo ""
+          echo "--- WiFi-01 Results ---"
+          if [ -f results_wifi01.txt ]; then
+            cat results_wifi01.txt
+          else
+            echo "❌ Password not found for wifi-01.cap"
+          fi
+          echo ""
+          echo "--- WiFi-02 Results ---"
+          if [ -f results_wifi02.txt ]; then
+            cat results_wifi02.txt
+          else
+            echo "❌ Password not found for wifi-02.cap"
+          fi
+          echo ""
+          echo "✨ Cracking process finished"
