@@ -37,7 +37,7 @@ jobs:
         run: |
           echo "🔓 Starting crack for hs/wifi-01.cap..."
           echo "Current progress and estimated time will be displayed below:"
-          hashcat -m 22000 -a 0 -w 3 --status --status-timer=10 hs/wifi-01.cap weakpass_4.merged.txt -o results_wifi01.txt
+          hashcat -m 22000 -a 0 -w 3 --status --status-timer=10 hs/wifi-01.hc22000 weakpass_4.merged.txt -o results_wifi01.txt
           echo "✅ Completed"
           if [ -f results_wifi01.txt ]; then
             echo "📊 WiFi-01 Results:"
@@ -50,7 +50,7 @@ jobs:
         run: |
           echo "🔓 Starting crack for hs/wifi-02.cap..."
           echo "Current progress and estimated time will be displayed below:"
-          hashcat -m 22000 -a 0 -w 3 --status --status-timer=10 hs/wifi-02.cap weakpass_4.merged.txt -o results_wifi02.txt
+          hashcat -m 22000 -a 0 -w 3 --status --status-timer=10 hs/wifi-02.hc22000 weakpass_4.merged.txt -o results_wifi02.txt
           echo "✅ Completed"
           if [ -f results_wifi02.txt ]; then
             echo "📊 WiFi-02 Results:"
