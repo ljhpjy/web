@@ -1,0 +1,26 @@
+name: Prepare Dictionary
+
+on:
+  workflow_dispatch:
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download WeakPass dictionary
+        run: |
+          wget -q --show-progress https://download.weakpass.com/wordlists/2025/weakpass_4.merged.txt.7z
+
+      - name: Extract dictionary
+        run: |
+          7z x weakpass_4.merged.txt.7z -o. -y
+
+      - name: Split into 2GB chunks
+        run: |
+          split -b 2000M weakpass_4.merged.txt dict_
+
+      - name: Upload dictionary chunks
+        uses: actions/upload-artifact@v3
+        with:
+          name: dict
+          path: dict_*
