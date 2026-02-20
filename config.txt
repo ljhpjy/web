@@ -1,0 +1,3 @@
+DICT_URL=https://download.weakpass.com/wordlists/2025/weakpass_4.merged.txt.7z
+CHUNK_LINES=200000
+HANDSHAKES=wifi-01.hc22000,wifi-02.hc22000
