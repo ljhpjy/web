@@ -7,20 +7,33 @@ jobs:
   prepare:
     runs-on: ubuntu-latest
     steps:
+      - name: Install 7zip
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y p7zip-full
+
       - name: Download WeakPass dictionary
         run: |
+          echo "📥 Downloading WeakPass dictionary..."
           wget -q --show-progress https://download.weakpass.com/wordlists/2025/weakpass_4.merged.txt.7z
+          echo "✅ Download completed"
 
       - name: Extract dictionary
         run: |
+          echo "📦 Extracting dictionary..."
           7z x weakpass_4.merged.txt.7z -o. -y
+          echo "✅ Extraction completed"
+          ls -lh weakpass_4.merged.txt
 
       - name: Split into 2GB chunks
         run: |
+          echo "✂ Splitting into 2GB chunks..."
           split -b 2000M weakpass_4.merged.txt dict_
+          ls -lh dict_*
+          echo "✅ Split completed"
 
       - name: Upload dictionary chunks
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: dict
           path: dict_*
