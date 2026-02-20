@@ -39,7 +39,7 @@ jobs:
           fi
           echo "start=$START" >> $GITHUB_OUTPUT
 
-      - name: Check if password already found
+      - name: Download found flag
         uses: actions/download-artifact@v4
         with:
           name: found
