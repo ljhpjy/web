@@ -1,9 +1,6 @@
 name: Hashcat WiFi Handshake Cracking
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 jobs:
