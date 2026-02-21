@@ -7,10 +7,6 @@ permissions:
   contents: write
   actions: write
 
-env:
-  JOB_COUNT: 10
-  CHUNK_LINES: 100000000   # 每个 job 跑 1 亿行，可调整
-
 jobs:
 
   crack:
@@ -18,7 +14,7 @@ jobs:
 
     strategy:
       matrix:
-        index: [0,1,2,3,4,5,6,7,8,9]   # 10 个 job
+        index: [0,1,2,3,4,5,6,7,8,9]   # 固定 10 个 job
 
     steps:
       - uses: actions/checkout@v3
@@ -31,9 +27,20 @@ jobs:
       - name: Compute slice
         id: slice
         run: |
-          START=$(( matrix.index * CHUNK_LINES + 1 ))
-          END=$(( (matrix.index + 1) * CHUNK_LINES ))
+          # 固定切片大小（写死）
+          CHUNK_LINES=100000000   # 每个 job 跑 1 亿行
 
+          # 强制检查 matrix.index
+          if [ -z "${{ matrix.index }}" ]; then
+            echo "matrix.index missing"
+            exit 1
+          fi
+
+          # 计算切片区间
+          START=$(( ${{ matrix.index }} * CHUNK_LINES + 1 ))
+          END=$(( ( ${{ matrix.index }} + 1 ) * CHUNK_LINES ))
+
+          # 输出
           echo "start=$START" >> $GITHUB_OUTPUT
           echo "end=$END" >> $GITHUB_OUTPUT
 
@@ -41,6 +48,11 @@ jobs:
 
       - name: Extract slice
         run: |
+          if [ -z "${{ steps.slice.outputs.start }}" ] || [ -z "${{ steps.slice.outputs.end }}" ]; then
+            echo "ERROR: start/end is empty"
+            exit 1
+          fi
+
           sed -n "${{ steps.slice.outputs.start }},${{ steps.slice.outputs.end }}p" weakpass_4.merged.txt > dict_part_${{ matrix.index }}.txt
 
       - name: Run hashcat
@@ -77,8 +89,8 @@ jobs:
 
       - name: Generate report
         run: |
-          echo "Job count:   ${{ env.JOB_COUNT }}" > report.txt
-          echo "Chunk lines: ${{ env.CHUNK_LINES }}" >> report.txt
+          echo "Job count:   10" > report.txt
+          echo "Chunk lines: 100000000" >> report.txt
           echo "Timestamp:   $(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> report.txt
           echo "" >> report.txt
 
