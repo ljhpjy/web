@@ -8,36 +8,17 @@ permissions:
   actions: write
 
 env:
-  JOB_COUNT: 8   # 并行 job 数量，可改成 4/8/16/32
+  JOB_COUNT: 10
+  CHUNK_LINES: 100000000   # 每个 job 跑 1 亿行，可调整
 
 jobs:
 
-  prepare:
-    runs-on: ubuntu-latest
-    outputs:
-      total: ${{ steps.count.outputs.total }}
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Download dictionary
-        run: |
-          wget -q https://download.weakpass.com/wordlists/2025/weakpass_4.merged.txt.7z
-          7z x weakpass_4.merged.txt.7z -o. -y
-
-      - name: Count lines
-        id: count
-        run: |
-          TOTAL=$(wc -l < weakpass_4.merged.txt)
-          echo "total=$TOTAL" >> $GITHUB_OUTPUT
-
-
   crack:
-    needs: prepare
     runs-on: ubuntu-latest
 
     strategy:
       matrix:
-        index: [0,1,2,3,4,5,6,7]   # 对应 JOB_COUNT=8
+        index: [0,1,2,3,4,5,6,7,8,9]   # 10 个 job
 
     steps:
       - uses: actions/checkout@v3
@@ -50,15 +31,13 @@ jobs:
       - name: Compute slice
         id: slice
         run: |
-          TOTAL=${{ needs.prepare.outputs.total }}
-          JOB_COUNT=${{ env.JOB_COUNT }}
-          CHUNK=$(( (TOTAL + JOB_COUNT - 1) / JOB_COUNT ))
-          START=$(( matrix.index * CHUNK + 1 ))
-          END=$(( (matrix.index + 1) * CHUNK ))
-          if [ $START -gt $TOTAL ]; then START=$TOTAL; fi
-          if [ $END -gt $TOTAL ]; then END=$TOTAL; fi
+          START=$(( matrix.index * CHUNK_LINES + 1 ))
+          END=$(( (matrix.index + 1) * CHUNK_LINES ))
+
           echo "start=$START" >> $GITHUB_OUTPUT
           echo "end=$END" >> $GITHUB_OUTPUT
+
+          echo "Job ${{ matrix.index }} slice: $START → $END"
 
       - name: Extract slice
         run: |
@@ -98,10 +77,8 @@ jobs:
 
       - name: Generate report
         run: |
-          TOTAL=${{ needs.prepare.outputs.total }}
-          JOB_COUNT=${{ env.JOB_COUNT }}
-          echo "Total lines: $TOTAL" > report.txt
-          echo "Job count:   $JOB_COUNT" >> report.txt
+          echo "Job count:   ${{ env.JOB_COUNT }}" > report.txt
+          echo "Chunk lines: ${{ env.CHUNK_LINES }}" >> report.txt
           echo "Timestamp:   $(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> report.txt
           echo "" >> report.txt
 
