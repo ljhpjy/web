@@ -32,7 +32,7 @@ jobs:
       - name: Compute slice
         id: slice
         run: |
-          CHUNK_LINES=100000000
+          CHUNK_LINES=400000000
 
           if [ -z "${{ matrix.index }}" ]; then
             echo "matrix.index missing"
