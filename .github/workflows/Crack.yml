@@ -8,22 +8,16 @@ permissions:
   actions: write
 
 env:
-  CHUNK_LINES: 5000
+  CHUNK_LINES: 500
 
 jobs:
 
   A:
     runs-on: ubuntu-latest
-    if: github.event.inputs.job == 'A' || github.event_name == 'workflow_dispatch'
     timeout-minutes: 350
 
     steps:
       - uses: actions/checkout@v3
-
-      - name: Install tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y hashcat p7zip-full
 
       - name: Download progress from B
         uses: actions/download-artifact@v4
@@ -96,24 +90,15 @@ jobs:
           name: result
           path: result.txt
 
-      - name: Trigger B
-        if: hashFiles('done.txt') == ''
-        run: |
-          gh workflow run Crack.yml -f job=B
-
+    needs: []
 
   B:
     runs-on: ubuntu-latest
-    if: github.event.inputs.job == 'B'
     timeout-minutes: 350
+    needs: [A]
 
     steps:
       - uses: actions/checkout@v3
-
-      - name: Install tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y hashcat p7zip-full
 
       - name: Download progress from A
         uses: actions/download-artifact@v4
@@ -186,7 +171,4 @@ jobs:
           name: result
           path: result.txt
 
-      - name: Trigger A
-        if: hashFiles('done.txt') == ''
-        run: |
-          gh workflow run Crack.yml -f job=A
+    needs: [A]
