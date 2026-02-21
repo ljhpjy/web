@@ -7,7 +7,7 @@ on:
     types: [completed]
 
 env:
-  CHUNK_LINES: 5000000   # 每块 500 万行，先试这个，不合适再调
+  CHUNK_LINES: 5000000
 
 jobs:
   crack:
@@ -30,9 +30,7 @@ jobs:
 
       - name: Stop if all chunks done
         if: hashFiles('done.txt') != ''
-        run: |
-          echo "All chunks processed. Stopping A."
-          exit 0
+        run: echo "All chunks processed. Stopping A."
 
       - name: Download progress
         uses: actions/download-artifact@v4
@@ -65,16 +63,15 @@ jobs:
           START_LINE=$((CHUNK_INDEX * CHUNK_LINES + 1))
           END_LINE=$(((CHUNK_INDEX + 1) * CHUNK_LINES))
 
-          echo "This run will process lines $START_LINE to $END_LINE"
+          echo "Processing lines $START_LINE to $END_LINE"
 
           sed -n "${START_LINE},${END_LINE}p" weakpass_4.merged.txt > dict_part.txt || true
 
           if [ ! -s dict_part.txt ]; then
-            echo "No more lines in dictionary. Marking done."
             echo "DONE" > done.txt
           fi
 
-      - name: Upload done flag if no more chunks
+      - name: Upload done flag
         if: hashFiles('done.txt') != ''
         uses: actions/upload-artifact@v4
         with:
@@ -83,12 +80,10 @@ jobs:
 
       - name: Stop if no more chunks
         if: hashFiles('done.txt') != ''
-        run: |
-          echo "No more chunks to process. Stopping A."
-          exit 0
+        run: echo "No more chunks. Stopping A."
 
-      - name: Run hashcat on this chunk
-        id: crack
+      - name: Run hashcat
+        if: hashFiles('done.txt') == ''
         run: |
           hashcat -m 22000 -a 0 -w 3 \
             hs/wifi-01.hc22000 dict_part.txt \
@@ -97,6 +92,7 @@ jobs:
 
       - name: Check if found
         id: found
+        if: hashFiles('done.txt') == ''
         run: |
           if [ -s result_wifi01.txt ]; then
             echo "found=true" >> $GITHUB_OUTPUT
@@ -113,8 +109,7 @@ jobs:
 
       - name: Mark all done if found
         if: steps.found.outputs.found == 'true'
-        run: |
-          echo "FOUND" > done.txt
+        run: echo "FOUND" > done.txt
 
       - name: Upload done flag if found
         if: steps.found.outputs.found == 'true'
@@ -124,7 +119,7 @@ jobs:
           path: done.txt
 
       - name: Increase chunk index
-        if: steps.found.outputs.found == 'false'
+        if: steps.found.outputs.found == 'false' && hashFiles('done.txt') == ''
         run: |
           CHUNK_INDEX=${{ steps.read.outputs.chunk_index }}
           NEXT_INDEX=$((CHUNK_INDEX + 1))
@@ -132,7 +127,7 @@ jobs:
           echo "Next chunk index: $NEXT_INDEX"
 
       - name: Upload progress
-        if: steps.found.outputs.found == 'false'
+        if: steps.found.outputs.found == 'false' && hashFiles('done.txt') == ''
         uses: actions/upload-artifact@v4
         with:
           name: progress
