@@ -7,7 +7,7 @@ on:
     types: [completed]
 
 env:
-  CHUNK_LINES: 300000000
+  CHUNK_LINES: 3000
 
 jobs:
   crack:
