@@ -14,7 +14,7 @@ jobs:
 
     strategy:
       matrix:
-        index: [0,1,2,3,4,5,6,7,8,9]
+        index: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19]
 
     steps:
       - uses: actions/checkout@v3
@@ -32,7 +32,7 @@ jobs:
       - name: Compute slice
         id: slice
         run: |
-          CHUNK_LINES=400000000
+          CHUNK_LINES=200000000   # 每个 job 跑 2 亿行
 
           if [ -z "${{ matrix.index }}" ]; then
             echo "matrix.index missing"
@@ -95,8 +95,10 @@ jobs:
 
       - name: Generate report
         run: |
-          echo "Job count:   10" > report.txt
-          echo "Chunk lines: 100000000" >> report.txt
+          echo "Job count:   20" > report.txt
+          echo "Chunk lines: 200000000" >> report.txt
+          echo "Total coverage: 4,000,000,000 lines" >> report.txt
+          echo "Dictionary size: ~3.58B lines" >> report.txt
           echo "Timestamp:   $(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> report.txt
           echo "" >> report.txt
 
