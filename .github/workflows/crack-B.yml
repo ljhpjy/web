@@ -1,15 +1,15 @@
 name: Crack B
-permissions:
-  actions: write
-  contents: write
+
 on:
-  workflow_dispatch:
-  workflow_run:
-    workflows: ["Crack A"]
-    types: [completed]
+  repository_dispatch:
+    types: [run_B]
+
+permissions:
+  contents: write
+  actions: write
 
 env:
-  CHUNK_LINES: 300000000
+  CHUNK_LINES: 5000000
 
 jobs:
   crack:
@@ -27,17 +27,17 @@ jobs:
       - name: Download done flag
         uses: actions/download-artifact@v4
         with:
-          name: done
+          name: done_A
         continue-on-error: true
 
       - name: Stop if all chunks done
         if: hashFiles('done.txt') != ''
-        run: echo "All chunks processed. Stopping A."
+        run: echo "All chunks processed. Stopping B."
 
       - name: Download progress
         uses: actions/download-artifact@v4
         with:
-          name: progress
+          name: progress_A
         continue-on-error: true
 
       - name: Read chunk index
@@ -76,14 +76,14 @@ jobs:
         if: hashFiles('done.txt') != ''
         uses: actions/upload-artifact@v4
         with:
-          name: done
+          name: done_B
           path: done.txt
 
       - name: Stop if no more chunks
         if: hashFiles('done.txt') != ''
-        run: echo "No more chunks. Stopping A."
+        run: echo "No more chunks. Stopping B."
 
-      - name: Pre-increase chunk index (IMPORTANT)
+      - name: Pre-increase chunk index
         if: hashFiles('done.txt') == ''
         run: |
           CHUNK_INDEX=${{ steps.read.outputs.chunk_index }}
@@ -95,7 +95,7 @@ jobs:
         if: hashFiles('done.txt') == ''
         uses: actions/upload-artifact@v4
         with:
-          name: progress
+          name: progress_B
           path: progress.txt
 
       - name: Run hashcat
@@ -104,7 +104,8 @@ jobs:
           hashcat -m 22000 -a 0 -w 3 \
             hs/wifi-01.hc22000 dict_part.txt \
             -o result_wifi01.txt \
-            --status --potfile-disable || true
+            --potfile-disable \
+            --status --status-timer=60 || true
 
       - name: Check if found
         id: found
@@ -131,5 +132,14 @@ jobs:
         if: steps.found.outputs.found == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: done
+          name: done_B
           path: done.txt
+
+      - name: Trigger A
+        if: steps.found.outputs.found == 'false' && hashFiles('done.txt') == ''
+        run: |
+          curl -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.everest-preview+json" \
+            https://api.github.com/repos/${{ github.repository }}/dispatches \
+            -d '{"event_type": "run_A"}'
