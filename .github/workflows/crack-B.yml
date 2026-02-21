@@ -7,7 +7,7 @@ on:
     types: [completed]
 
 env:
-  CHUNK_LINES: 9000000000
+  CHUNK_LINES: 300000000
 
 jobs:
   crack:
@@ -102,7 +102,7 @@ jobs:
           hashcat -m 22000 -a 0 -w 3 \
             hs/wifi-01.hc22000 dict_part.txt \
             -o result_wifi01.txt \
-            --potfile-disable || true
+            --status --potfile-disable || true
 
       - name: Check if found
         id: found
