@@ -2,172 +2,141 @@ name: Crack
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "0 */6 * * *"   # 每 5 小时自动触发一次
 
 permissions:
   contents: write
   actions: write
 
 env:
-  CHUNK_LINES: 250000000
+  JOB_COUNT: 8   # 并行 job 数量，可改成 4/8/16 等
 
 jobs:
 
-  A:
+  prepare:
     runs-on: ubuntu-latest
-    timeout-minutes: 350
-
+    outputs:
+      total: ${{ steps.count.outputs.total }}
     steps:
       - uses: actions/checkout@v3
-
-      - name: Download progress from B
-        uses: actions/download-artifact@v4
-        with:
-          name: progress_B
-        continue-on-error: true
-
-      - name: Read chunk index
-        id: read
-        run: |
-          if [ -f progress.txt ]; then
-            CHUNK_INDEX=$(cat progress.txt)
-          else
-            CHUNK_INDEX=0
-          fi
-          echo "chunk_index=$CHUNK_INDEX" >> $GITHUB_OUTPUT
 
       - name: Download dictionary
         run: |
           wget -q https://download.weakpass.com/wordlists/2025/weakpass_4.merged.txt.7z
           7z x weakpass_4.merged.txt.7z -o. -y
 
-      - name: Prepare chunk
+      - name: Count lines
+        id: count
         run: |
-          CHUNK_INDEX=${{ steps.read.outputs.chunk_index }}
-          START=$((CHUNK_INDEX * CHUNK_LINES + 1))
-          END=$(((CHUNK_INDEX + 1) * CHUNK_LINES))
-          sed -n "${START},${END}p" weakpass_4.merged.txt > dict_part.txt || true
-          if [ ! -s dict_part.txt ]; then
-            echo "DONE" > done.txt
-          fi
+          TOTAL=$(wc -l < weakpass_4.merged.txt)
+          echo "total=$TOTAL" >> $GITHUB_OUTPUT
 
-      - name: Upload done flag
-        if: hashFiles('done.txt') != ''
+      - name: Upload dictionary
         uses: actions/upload-artifact@v4
         with:
-          name: done_A
-          path: done.txt
-
-      - name: Stop if done
-        if: hashFiles('done.txt') != ''
-        run: echo "A finished"
-
-      - name: Pre-increase chunk index
-        if: hashFiles('done.txt') == ''
-        run: |
-          NEXT=$(( ${{ steps.read.outputs.chunk_index }} + 1 ))
-          echo $NEXT > progress.txt
-
-      - name: Upload progress
-        if: hashFiles('done.txt') == ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: progress_A
-          path: progress.txt
-
-      - name: Run hashcat
-        if: hashFiles('done.txt') == ''
-        run: |
-          hashcat -m 22000 -a 0 -w 3 \
-            hs/wifi-01.hc22000 dict_part.txt \
-            -o result.txt \
-            --status --status-timer=60 \
-            --potfile-disable || true
-
-      - name: Upload result
-        if: hashFiles('result.txt') != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: result
-          path: result.txt
+          name: dict
+          path: weakpass_4.merged.txt
 
 
-  B:
+  crack:
+    needs: prepare
     runs-on: ubuntu-latest
-    timeout-minutes: 350
-    needs: A
+
+    strategy:
+      matrix:
+        index: [0,1,2,3,4,5,6,7]   # 对应 JOB_COUNT=8
 
     steps:
       - uses: actions/checkout@v3
 
-      - name: Download progress from A
+      - name: Download dictionary
         uses: actions/download-artifact@v4
         with:
-          name: progress_A
-        continue-on-error: true
+          name: dict
 
-      - name: Read chunk index
-        id: read
+      - name: Compute slice
+        id: slice
         run: |
-          if [ -f progress.txt ]; then
-            CHUNK_INDEX=$(cat progress.txt)
-          else
-            CHUNK_INDEX=0
+          TOTAL=${{ needs.prepare.outputs.total }}
+          JOB_COUNT=${{ env.JOB_COUNT }}
+          CHUNK=$(( (TOTAL + JOB_COUNT - 1) / JOB_COUNT ))
+          START=$(( matrix.index * CHUNK + 1 ))
+          END=$(( (matrix.index + 1) * CHUNK ))
+          if [ $START -gt $TOTAL ]; then
+            START=$TOTAL
           fi
-          echo "chunk_index=$CHUNK_INDEX" >> $GITHUB_OUTPUT
-
-      - name: Download dictionary
-        run: |
-          wget -q https://download.weakpass.com/wordlists/2025/weakpass_4.merged.txt.7z
-          7z x weakpass_4.merged.txt.7z -o. -y
-
-      - name: Prepare chunk
-        run: |
-          CHUNK_INDEX=${{ steps.read.outputs.chunk_index }}
-          START=$((CHUNK_INDEX * CHUNK_LINES + 1))
-          END=$(((CHUNK_INDEX + 1) * CHUNK_LINES))
-          sed -n "${START},${END}p" weakpass_4.merged.txt > dict_part.txt || true
-          if [ ! -s dict_part.txt ]; then
-            echo "DONE" > done.txt
+          if [ $END -gt $TOTAL ]; then
+            END=$TOTAL
           fi
+          echo "start=$START" >> $GITHUB_OUTPUT
+          echo "end=$END" >> $GITHUB_OUTPUT
 
-      - name: Upload done flag
-        if: hashFiles('done.txt') != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: done_B
-          path: done.txt
-
-      - name: Stop if done
-        if: hashFiles('done.txt') != ''
-        run: echo "B finished"
-
-      - name: Pre-increase chunk index
-        if: hashFiles('done.txt') == ''
+      - name: Extract slice
         run: |
-          NEXT=$(( ${{ steps.read.outputs.chunk_index }} + 1 ))
-          echo $NEXT > progress.txt
-
-      - name: Upload progress
-        if: hashFiles('done.txt') == ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: progress_B
-          path: progress.txt
+          sed -n "${{ steps.slice.outputs.start }},${{ steps.slice.outputs.end }}p" weakpass_4.merged.txt > dict_part_${{ matrix.index }}.txt
 
       - name: Run hashcat
-        if: hashFiles('done.txt') == ''
         run: |
           hashcat -m 22000 -a 0 -w 3 \
-            hs/wifi-01.hc22000 dict_part.txt \
-            -o result.txt \
+            hs/wifi-01.hc22000 dict_part_${{ matrix.index }}.txt \
+            -o result_${{ matrix.index }}.txt \
             --status --status-timer=60 \
             --potfile-disable || true
 
-      - name: Upload result
-        if: hashFiles('result.txt') != ''
+      - name: Upload result (even if empty)
         uses: actions/upload-artifact@v4
         with:
-          name: result
-          path: result.txt
+          name: results
+          path: result_${{ matrix.index }}.txt
+          if-no-files-found: ignore
+
+
+  finalize:
+    needs: crack
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Download all results
+        uses: actions/download-artifact@v4
+        with:
+          name: results
+
+      - name: Merge results
+        run: |
+          cat result_*.txt 2>/dev/null || true
+          cat result_*.txt 2>/dev/null > all_results.txt || true
+
+      - name: Decide final status and generate report
+        run: |
+          TOTAL=${{ needs.prepare.outputs.total }}
+          JOB_COUNT=${{ env.JOB_COUNT }}
+          echo "Total lines: $TOTAL" > report.txt
+          echo "Job count:   $JOB_COUNT" >> report.txt
+          echo "Timestamp:   $(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> report.txt
+          echo "" >> report.txt
+
+          if [ -s all_results.txt ]; then
+            echo "Status:      PASSWORD FOUND" >> report.txt
+            echo "" >> report.txt
+            echo "Passwords:" >> report.txt
+            cat all_results.txt >> report.txt
+            echo ""
+            echo "===== FINAL PASSWORD(S) ====="
+            cat all_results.txt
+          else
+            echo "Status:      PASSWORD NOT FOUND" >> report.txt
+            echo "" >> report.txt
+            echo "No password found in the entire dictionary." >> report.txt
+            echo "===== PASSWORD NOT FOUND ====="
+          fi
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: report
+          path: report.txt
+
+      - name: Cleanup workspace
+        run: |
+          rm -f weakpass_4.merged.txt dict_part_*.txt result_*.txt all_results.txt || true
