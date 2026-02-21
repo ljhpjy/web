@@ -5,6 +5,9 @@ on:
     workflows: ["Crack A"]
     types: [completed]
 
+env:
+  CHUNK_LINES: 5000000   # 和 A 保持一致
+
 jobs:
   crack:
     runs-on: ubuntu-latest
@@ -18,83 +21,114 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y hashcat p7zip-full
 
+      - name: Download done flag
+        uses: actions/download-artifact@v4
+        with:
+          name: done
+        continue-on-error: true
+
+      - name: Stop if all chunks done
+        if: hashFiles('done.txt') != ''
+        run: |
+          echo "All chunks processed. Stopping B."
+          exit 0
+
       - name: Download progress
         uses: actions/download-artifact@v4
         with:
           name: progress
         continue-on-error: true
 
-      - name: Read progress
+      - name: Read chunk index
         id: read
         run: |
           if [ -f progress.txt ]; then
-            START=$(cat progress.txt)
+            CHUNK_INDEX=$(cat progress.txt)
           else
-            START=1
+            CHUNK_INDEX=0
           fi
-          echo "start=$START" >> $GITHUB_OUTPUT
-          echo "Starting from line $START"
-
-      - name: Download found flag
-        uses: actions/download-artifact@v4
-        with:
-          name: found
-        continue-on-error: true
-
-      - name: Stop if found
-        if: hashFiles('found.txt') != ''
-        run: |
-          echo "Password already found. Stopping B."
-          exit 0
+          echo "chunk_index=$CHUNK_INDEX" >> $GITHUB_OUTPUT
+          echo "Current chunk index: $CHUNK_INDEX"
 
       - name: Download dictionary
         run: |
           wget -q https://download.weakpass.com/wordlists/2025/weakpass_4.merged.txt.7z
           7z x weakpass_4.merged.txt.7z -o. -y
 
-      - name: Prepare dictionary slice
+      - name: Prepare chunk
+        id: chunk
         run: |
-          START=${{ steps.read.outputs.start }}
-          sed -n "${START},999999999p" weakpass_4.merged.txt > dict_part.txt
+          CHUNK_INDEX=${{ steps.read.outputs.chunk_index }}
+          CHUNK_LINES=${CHUNK_LINES}
 
-      - name: Run hashcat and capture progress
+          START_LINE=$((CHUNK_INDEX * CHUNK_LINES + 1))
+          END_LINE=$(((CHUNK_INDEX + 1) * CHUNK_LINES))
+
+          echo "This run will process lines $START_LINE to $END_LINE"
+
+          sed -n "${START_LINE},${END_LINE}p" weakpass_4.merged.txt > dict_part.txt || true
+
+          if [ ! -s dict_part.txt ]; then
+            echo "No more lines in dictionary. Marking done."
+            echo "DONE" > done.txt
+          fi
+
+      - name: Upload done flag if no more chunks
+        if: hashFiles('done.txt') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: done
+          path: done.txt
+
+      - name: Stop if no more chunks
+        if: hashFiles('done.txt') != ''
+        run: |
+          echo "No more chunks to process. Stopping B."
+          exit 0
+
+      - name: Run hashcat on this chunk
         id: crack
         run: |
-          START=${{ steps.read.outputs.start }}
-
           hashcat -m 22000 -a 0 -w 3 \
-            --status --status-timer=30 \
             hs/wifi-01.hc22000 dict_part.txt \
             -o result_wifi01.txt \
-            2>&1 | tee hashcat.log &
-
-          PID=$!
-
-          while kill -0 $PID 2>/dev/null; do
-            sleep 30
-            PROG=$(grep "Progress" hashcat.log | tail -1 | awk '{print $2}' | cut -d'/' -f1)
-            if [ ! -z "$PROG" ]; then
-              CURRENT=$((START + PROG))
-              echo $CURRENT > progress.txt
-            fi
-          done
+            --potfile-disable
 
       - name: Check if found
         id: found
         run: |
           if [ -s result_wifi01.txt ]; then
-            echo "FOUND" > found.txt
             echo "found=true" >> $GITHUB_OUTPUT
           else
             echo "found=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Upload found flag
+      - name: Upload results
         if: steps.found.outputs.found == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: found
-          path: found.txt
+          name: results
+          path: result_wifi01.txt
+
+      - name: Mark all done if found
+        if: steps.found.outputs.found == 'true'
+        run: |
+          echo "FOUND" > done.txt
+
+      - name: Upload done flag if found
+        if: steps.found.outputs.found == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: done
+          path: done.txt
+
+      - name: Increase chunk index
+        if: steps.found.outputs.found == 'false'
+        run: |
+          CHUNK_INDEX=${{ steps.read.outputs.chunk_index }}
+          NEXT_INDEX=$((CHUNK_INDEX + 1))
+          echo $NEXT_INDEX > progress.txt
+          echo "Next chunk index: $NEXT_INDEX"
 
       - name: Upload progress
         if: steps.found.outputs.found == 'false'
@@ -102,10 +136,3 @@ jobs:
         with:
           name: progress
           path: progress.txt
-
-      - name: Upload results
-        uses: actions/upload-artifact@v4
-        with:
-          name: results
-          path: result_wifi01.txt
-        continue-on-error: true
