@@ -47,7 +47,6 @@ jobs:
             CHUNK_INDEX=0
           fi
           echo "chunk_index=$CHUNK_INDEX" >> $GITHUB_OUTPUT
-          echo "Current chunk index: $CHUNK_INDEX"
 
       - name: Download dictionary
         run: |
@@ -82,13 +81,28 @@ jobs:
         if: hashFiles('done.txt') != ''
         run: echo "No more chunks. Stopping A."
 
+      - name: Pre-increase chunk index (IMPORTANT)
+        if: hashFiles('done.txt') == ''
+        run: |
+          CHUNK_INDEX=${{ steps.read.outputs.chunk_index }}
+          NEXT_INDEX=$((CHUNK_INDEX + 1))
+          echo $NEXT_INDEX > progress.txt
+          echo "Next chunk index: $NEXT_INDEX"
+
+      - name: Upload progress
+        if: hashFiles('done.txt') == ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: progress
+          path: progress.txt
+
       - name: Run hashcat
         if: hashFiles('done.txt') == ''
         run: |
           hashcat -m 22000 -a 0 -w 3 \
             hs/wifi-01.hc22000 dict_part.txt \
             -o result_wifi01.txt \
-            --potfile-disable
+            --potfile-disable || true
 
       - name: Check if found
         id: found
@@ -117,18 +131,3 @@ jobs:
         with:
           name: done
           path: done.txt
-
-      - name: Increase chunk index
-        if: steps.found.outputs.found == 'false' && hashFiles('done.txt') == ''
-        run: |
-          CHUNK_INDEX=${{ steps.read.outputs.chunk_index }}
-          NEXT_INDEX=$((CHUNK_INDEX + 1))
-          echo $NEXT_INDEX > progress.txt
-          echo "Next chunk index: $NEXT_INDEX"
-
-      - name: Upload progress
-        if: steps.found.outputs.found == 'false' && hashFiles('done.txt') == ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: progress
-          path: progress.txt
