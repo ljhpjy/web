@@ -2,15 +2,18 @@ name: Crack
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "0 */6 * * *"   # 每 5 小时自动触发一次
 
 permissions:
   contents: write
   actions: write
 
 env:
-  CHUNK_LINES: 500
+  CHUNK_LINES: 250000000
 
 jobs:
+
   A:
     runs-on: ubuntu-latest
     timeout-minutes: 350
@@ -88,6 +91,7 @@ jobs:
         with:
           name: result
           path: result.txt
+
 
   B:
     runs-on: ubuntu-latest
