@@ -32,12 +32,7 @@ jobs:
       - name: Compute slice
         id: slice
         run: |
-          CHUNK_LINES=200000000   # 每个 job 跑 2 亿行
-
-          if [ -z "${{ matrix.index }}" ]; then
-            echo "matrix.index missing"
-            exit 1
-          fi
+          CHUNK_LINES=200000000
 
           START=$(( ${{ matrix.index }} * CHUNK_LINES + 1 ))
           END=$(( ( ${{ matrix.index }} + 1 ) * CHUNK_LINES ))
@@ -49,11 +44,6 @@ jobs:
 
       - name: Extract slice
         run: |
-          if [ -z "${{ steps.slice.outputs.start }}" ] || [ -z "${{ steps.slice.outputs.end }}" ]; then
-            echo "ERROR: start/end is empty"
-            exit 1
-          fi
-
           sed -n "${{ steps.slice.outputs.start }},${{ steps.slice.outputs.end }}p" weakpass_4.merged.txt > dict_part_${{ matrix.index }}.txt
 
       - name: Run hashcat
@@ -73,7 +63,7 @@ jobs:
       - name: Upload result
         uses: actions/upload-artifact@v4
         with:
-          name: results
+          name: results_${{ matrix.index }}
           path: result_${{ matrix.index }}.txt
 
 
@@ -87,7 +77,8 @@ jobs:
       - name: Download all results
         uses: actions/download-artifact@v4
         with:
-          name: results
+          pattern: results_*
+          merge-multiple: true
 
       - name: Merge results
         run: |
@@ -107,14 +98,10 @@ jobs:
             echo "" >> report.txt
             echo "Passwords:" >> report.txt
             cat all_results.txt >> report.txt
-            echo ""
-            echo "===== FINAL PASSWORD(S) ====="
-            cat all_results.txt
           else
             echo "Status:      PASSWORD NOT FOUND" >> report.txt
             echo "" >> report.txt
             echo "No password found in the entire dictionary." >> report.txt
-            echo "===== PASSWORD NOT FOUND ====="
           fi
 
       - name: Upload report
@@ -122,7 +109,3 @@ jobs:
         with:
           name: report
           path: report.txt
-
-      - name: Cleanup workspace
-        run: |
-          rm -f weakpass_4.merged.txt dict_part_*.txt result_*.txt all_results.txt || true
