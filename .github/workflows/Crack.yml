@@ -54,7 +54,7 @@ jobs:
       - name: Run hashcat
         run: |
           hashcat -m 22000 -a 0 -w 3 \
-            hs/wifi-01.hc22000 dict_part_${{ matrix.index }}.txt \
+            hs/wifi-02.hc22000 dict_part_${{ matrix.index }}.txt \
             -o result_${{ matrix.index }}.txt \
             --status --status-timer=60 \
             --potfile-disable || true
