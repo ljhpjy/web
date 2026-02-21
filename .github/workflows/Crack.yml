@@ -14,7 +14,12 @@ jobs:
 
     strategy:
       matrix:
-        index: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19]
+        index: [
+          0,1,2,3,4,5,6,7,8,9,
+          10,11,12,13,14,15,16,17,18,19,
+          20,21,22,23,24,25,26,27,28,29,
+          30,31,32,33,34,35,36,37,38,39
+        ]
 
     steps:
       - uses: actions/checkout@v3
@@ -32,7 +37,7 @@ jobs:
       - name: Compute slice
         id: slice
         run: |
-          CHUNK_LINES=200000000
+          CHUNK_LINES=100000000   # 每 job 1 亿行
 
           START=$(( ${{ matrix.index }} * CHUNK_LINES + 1 ))
           END=$(( ( ${{ matrix.index }} + 1 ) * CHUNK_LINES ))
@@ -86,8 +91,8 @@ jobs:
 
       - name: Generate report
         run: |
-          echo "Job count:   20" > report.txt
-          echo "Chunk lines: 200000000" >> report.txt
+          echo "Job count:   40" > report.txt
+          echo "Chunk lines: 100000000" >> report.txt
           echo "Total coverage: 4,000,000,000 lines" >> report.txt
           echo "Dictionary size: ~3.58B lines" >> report.txt
           echo "Timestamp:   $(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> report.txt
