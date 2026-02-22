@@ -22,14 +22,6 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Check if password already found
-        run: |
-          gh run download --name found --dir found_dir || true
-          if [ -f found_dir/found.txt ]; then
-            echo "Password already found by another job. Exiting."
-            exit 0
-          fi
-
       - name: Install hashcat
         run: |
           sudo apt-get update
@@ -38,6 +30,87 @@ jobs:
       - name: Create Guangxi + Guangdong prefix7 list
         run: |
           cat > prefix7.txt << 'EOF'
+1307770
+1307771
+1307772
+1307773
+1307774
+1307775
+1307776
+1307777
+1307778
+1307779
+1316890
+1316891
+1316892
+1316893
+1316894
+1316895
+1316896
+1316897
+1316898
+1316899
+1320770
+1320771
+1320772
+1320773
+1320774
+1320775
+1320776
+1320777
+1320778
+1320779
+1330770
+1330771
+1330772
+1330773
+1330774
+1330775
+1330776
+1330777
+1330778
+1330779
+1340770
+1340771
+1340772
+1340773
+1340774
+1340775
+1340776
+1340777
+1340778
+1340779
+1350770
+1350771
+1350772
+1350773
+1350774
+1350775
+1350776
+1350777
+1350778
+1350779
+1360770
+1360771
+1360772
+1360773
+1360774
+1360775
+1360776
+1360777
+1360778
+1360779
+1370770
+1370771
+1370772
+1370773
+1370774
+1370775
+1370776
+1370777
+1370778
+1370779
+1380770
 1380771
 1380772
 1380773
@@ -47,15 +120,17 @@ jobs:
 1380777
 1380778
 1380779
-1590771
-1590772
-1590773
-1590774
-1590775
-1590776
-1590777
-1590778
-1590779
+1390770
+1390771
+1390772
+1390773
+1390774
+1390775
+1390776
+1390777
+1390778
+1390779
+1470770
 1470771
 1470772
 1470773
@@ -65,20 +140,101 @@ jobs:
 1470777
 1470778
 1470779
+1500770
+1500771
+1500772
+1500773
+1500774
+1500775
+1500776
+1500777
+1500778
+1500779
+1510770
+1510771
+1510772
+1510773
+1510774
+1510775
+1510776
+1510777
+1510778
+1510779
+1520770
+1520771
+1520772
+1520773
+1520774
+1520775
+1520776
+1520777
+1520778
+1520779
+1550770
+1550771
+1550772
+1550773
+1550774
+1550775
+1550776
+1550777
+1550778
+1550779
+1560770
+1560771
+1560772
+1560773
+1560774
+1560775
+1560776
+1560777
+1560778
+1560779
+1570770
+1570771
+1570772
+1570773
+1570774
+1570775
+1570776
+1570777
+1570778
+1570779
+1580770
+1580771
+1580772
+1580773
+1580774
+1580775
+1580776
+1580777
+1580778
+1580779
+1590770
+1590771
+1590772
+1590773
+1590774
+1590775
+1590776
+1590777
+1590778
+1590779
+1800770
+1800771
+1800772
+1800773
+1800774
+1800775
+1800776
+1800777
+1800778
+1800779
 EOF
 
       - name: Run mask attack for all prefix7
         run: |
           while read p; do
-
-            # 每轮开始前检查是否已经找到密码
-            gh run download --name found --dir found_dir || true
-            if [ -f found_dir/found.txt ]; then
-              echo "Password already found. Exiting job."
-              exit 0
-            fi
-
-            # 跑 mask
             hashcat -m 22000 -a 3 \
               hs/wifi-02.hc22000 \
               "${{ matrix.prefix }}$p?d?d?d?d" \
@@ -86,17 +242,6 @@ EOF
               --append-output \
               --status --status-timer=60 \
               --potfile-disable || true
-
-            # 如果找到密码 → 上传 found.txt → 触发全局停止
-            if [ -s result_${{ matrix.prefix }}.txt ]; then
-              echo "Password found!"
-              mkdir found
-              cp result_${{ matrix.prefix }}.txt found/found.txt
-
-              gh run upload-artifact --name found --path found/found.txt
-              exit 0
-            fi
-
           done < prefix7.txt
 
       - name: Ensure result exists
@@ -119,23 +264,18 @@ EOF
     steps:
       - uses: actions/checkout@v3
 
-      - name: Try to download found password
+      - name: Download all results
         uses: actions/download-artifact@v4
         with:
-          name: found
-        continue-on-error: true
+          pattern: results_*
+          merge-multiple: true
 
-      - name: Generate report
+      - name: Merge results
         run: |
-          if [ -f found.txt ]; then
-            echo "PASSWORD FOUND" > report.txt
-            cat found.txt >> report.txt
-          else
-            echo "PASSWORD NOT FOUND" > report.txt
-          fi
+          cat result_*.txt 2>/dev/null > all_results.txt || true
 
       - name: Upload report
         uses: actions/upload-artifact@v4
         with:
-          name: report
-          path: report.txt
+          name: final_results
+          path: all_results.txt
