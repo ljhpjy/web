@@ -4,22 +4,59 @@ on:
   workflow_dispatch:
 
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download dictionary
+        run: |
+          wget -O dict.7z https://download.weakpass.com/wordlists/2088/all_in_one.txt.7z
+
+      - name: Upload dictionary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dict
+          path: dict.7z
+
   crack:
+    needs: prepare
     runs-on: ubuntu-latest
     strategy:
       max-parallel: 20
       matrix:
-        job_id: [0,1,2,...,255]
+        job_id: ${{ fromJson('[
+          0,1,2,3,4,5,6,7,8,9,
+          10,11,12,13,14,15,16,17,18,19,
+          20,21,22,23,24,25,26,27,28,29,
+          30,31,32,33,34,35,36,37,38,39,
+          40,41,4...,99,
+          100,101,102,103,104,105,106,107,108,109,
+          110,111,112,113,114,115,116,117,118,119,
+          120,121,122,123,124,125,126,127,128,129,
+          130,131,132,133,134,135,136,137,138,139,
+          140,141,142,143,144,145,146,147,148,149,
+          150,151,152,153,154,155,156,157,158,159,
+          160,161,162,163,164,165,166,167,168,169,
+          170,171,172,173,174,175,176,177,178,179,
+          180,181,182,183,184,185,186,187,188,189,
+          190,191,192,193,194,195,196,197,198,199,
+          200,201,202,203,204,205,206,207,208,209,
+          210,211,212,213,214,215,216,217,218,219,
+          220,221,222,223,224,225,226,227,228,229,
+          230,231,232,233,234,235,236,237,238,239,
+          240,241,242,243,244,245,246,247,248,249,
+          250,251,252,253,254,255
+        ]') }}
 
     steps:
+      - name: Download dictionary artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dict
+
       - name: Install tools
         run: |
           sudo apt-get update
           sudo apt-get install -y p7zip-full hashcat
-
-      - name: Download dictionary
-        run: |
-          wget -O all_in_one.txt.7z https://download.weakpass.com/wordlists/2088/all_in_one.txt.7z
 
       - name: Extract this job's 120M lines
         run: |
@@ -32,7 +69,7 @@ jobs:
 
           echo "Job ${{ matrix.job_id }} processing lines $START to $END"
 
-          7z x all_in_one.txt.7z -so | \
+          7z x dict.7z -so | \
             awk -v s=$START -v e=$END 'NR>=s && NR<=e' > dict.txt
 
       - name: Run hashcat
