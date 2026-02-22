@@ -8,16 +8,50 @@ permissions:
   actions: write
 
 jobs:
-
   crack:
     runs-on: ubuntu-latest
 
     strategy:
       matrix:
-        prefix: [
-          a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s,t,u,v,w,x,y,z,
-          A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z
-        ]
+        prefix:
+          - a
+          - b
+          - c
+          - d
+          - e
+          - f
+          - g
+          - h
+          - i
+          - j
+          - k
+          - l
+          - m
+          - n
+          - o
+          - p
+          - q
+          - r
+          - s
+          - t
+          - u
+          - v
+          - w
+          - x
+          - y
+          - z
+          - A
+          - B
+          - C
+          - D
+          - E
+          - F
+          - G
+          - H
+          - I
+          - J
+          - K
+          - L
 
     steps:
       - uses: actions/checkout@v3
@@ -29,7 +63,7 @@ jobs:
 
       - name: Create Guangxi + Guangdong prefix7 list
         run: |
-          cat > prefix7.txt << 'EOF'
+          cat << EOF > prefix7.txt
 1380771
 1380772
 1380773
@@ -82,7 +116,6 @@ EOF
         with:
           name: results_${{ matrix.prefix }}
           path: result_${{ matrix.prefix }}.txt
-
 
   finalize:
     needs: crack
