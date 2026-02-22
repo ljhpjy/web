@@ -1,42 +1,118 @@
-name: slice-streaming
+name: realtime-slice-crack
 
 on:
   workflow_dispatch:
 
 jobs:
-  slice:
+  pipeline:
     runs-on: ubuntu-latest
-    steps:
-      - name: Install p7zip
-        run: sudo apt-get update && sudo apt-get install -y p7zip-full
 
-      - name: Download all_in_one.txt.7z
+    steps:
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y p7zip-full hashcat jq
+
+      - name: Download dictionary
         run: |
           wget -O all_in_one.txt.7z https://download.weakpass.com/wordlists/2088/all_in_one.txt.7z
 
-      - name: Stream extract and slice into 100M-line chunks
+      - name: Realtime slice + crack
         run: |
           mkdir chunks
-          file_index=0
-          line_count=0
-          max_lines=100000000
+          mkdir results
 
-          # 打开第一个输出文件
-          output_file=$(printf "chunks/part_%03d" $file_index)
-          echo "Writing to $output_file"
+          MAX_LINES=100000000
+          MAX_JOBS=20
+          FILE_INDEX=0
+          FOUND_FLAG="results/found.flag"
 
-          # 流式解压并逐行处理
-          7z x all_in_one.txt.7z -so | while IFS= read -r line; do
-            echo "$line" >> "$output_file"
-            line_count=$((line_count + 1))
+          # 后台监控器：发现 found.flag → 杀死所有 hashcat → 退出 workflow
+          monitor() {
+            while true; do
+              if [ -f "$FOUND_FLAG" ]; then
+                echo "Password found! Killing all hashcat jobs..."
+                pkill -9 hashcat || true
+                exit 0
+              fi
+              sleep 1
+            done
+          }
+          monitor &
 
-            # 达到 1 亿行 → 切换到下一个文件
-            if [ "$line_count" -ge "$max_lines" ]; then
-              file_index=$((file_index + 1))
-              output_file=$(printf "chunks/part_%03d" $file_index)
-              echo "Switching to $output_file"
-              line_count=0
+          # hashcat 子任务
+          run_hashcat() {
+            part_file="$1"
+            idx="$2"
+
+            echo "Starting hashcat job for $part_file"
+
+            hashcat -m 22000 -a 0 -w 3 hs/wifi-01.hc22000 "$part_file" \
+              -o "results/result_$idx.txt" \
+              --logfile="results/log_$idx.txt"
+
+            # 检查是否破解
+            if grep -q ":Cracked" "results/log_$idx.txt"; then
+              echo "FOUND" > "$FOUND_FLAG"
+
+              # 上传结果（必须成功）
+              echo "Uploading cracked result..."
+              gh api \
+                -X POST \
+                -F "name=cracked_result" \
+                -F "file=@results/result_$idx.txt" \
+                -F "file=@results/log_$idx.txt" \
+                repos/$GITHUB_REPOSITORY/actions/artifacts > upload.json
+
+              if [ $? -eq 0 ]; then
+                echo "Upload success. Ending workflow."
+                exit 0
+              else
+                echo "Upload failed! NOT ending workflow."
+              fi
+            fi
+
+            # 没破解 → 删除切片
+            rm -f "$part_file"
+          }
+
+          export -f run_hashcat
+
+          # 流式切片 + 实时启动 hashcat
+          7z x all_in_one.txt.7z -so | awk -v max=$MAX_LINES '
+          {
+            file = sprintf("chunks/part_%03d.txt", int((NR-1)/max));
+            print >> file
+          }
+          END { print "DONE" }
+          ' | while read signal; do
+
+            for f in chunks/*.txt; do
+              if [ ! -f "$f.running" ]; then
+                touch "$f.running"
+
+                # 控制最多 20 个并发
+                while [ $(jobs -r | wc -l) -ge $MAX_JOBS ]; do
+                  sleep 1
+                done
+
+                idx=$(printf "%03d" $FILE_INDEX)
+                bash -c "run_hashcat '$f' '$idx'" &
+                FILE_INDEX=$((FILE_INDEX+1))
+              fi
+            done
+
+            # 如果已经破解 → 退出
+            if [ -f "$FOUND_FLAG" ]; then
+              break
             fi
           done
 
-          echo "Done slicing."
+          # 等待所有后台任务
+          wait
+
+          if [ -f "$FOUND_FLAG" ]; then
+            echo "Workflow ended because password was cracked."
+          else
+            echo "All chunks processed. No password found."
+          fi
