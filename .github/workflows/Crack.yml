@@ -2,11 +2,6 @@ name: Crack
 
 on:
   workflow_dispatch:
-    inputs:
-      round:
-        description: "Which batch (round) to run"
-        required: true
-        default: "0"
 
 permissions:
   contents: write
@@ -19,11 +14,9 @@ jobs:
 
     strategy:
       matrix:
-        index: [
-          0,1,2,3,4,5,6,7,8,9,
-          10,11,12,13,14,15,16,17,18,19,
-          20,21,22,23,24,25,26,27,28,29,
-          30,31,32,33,34,35,36,37,38,39
+        prefix: [
+          a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s,t,u,v,w,x,y,z,
+          A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z
         ]
 
     steps:
@@ -34,49 +27,26 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y hashcat
 
-      - name: Download dictionary
+      - name: Run mask attack
         run: |
-          wget -q https://download.weakpass.com/wordlists/2088/all_in_one.txt.7z
-          7z x all_in_one.txt.7z -o. -y
-
-      - name: Compute slice
-        id: slice
-        run: |
-          ROUND=${{ github.event.inputs.round }}
-          CHUNK_LINES=100000000
-          JOB_OFFSET=$(( ROUND * 40 * CHUNK_LINES ))
-
-          START=$(( JOB_OFFSET + ${{ matrix.index }} * CHUNK_LINES + 1 ))
-          END=$(( JOB_OFFSET + ( ${{ matrix.index }} + 1 ) * CHUNK_LINES ))
-
-          echo "start=$START" >> $GITHUB_OUTPUT
-          echo "end=$END" >> $GITHUB_OUTPUT
-
-          echo "Round $ROUND Job ${{ matrix.index }} slice: $START → $END"
-
-      - name: Extract slice
-        run: |
-          sed -n "${{ steps.slice.outputs.start }},${{ steps.slice.outputs.end }}p" all_in_one.txt > dict_part_${{ matrix.index }}.txt
-
-      - name: Run hashcat
-        run: |
-          hashcat -m 22000 -a 0 -w 3 \
-            hs/wifi-01.hc22000 dict_part_${{ matrix.index }}.txt \
-            -o result_${{ matrix.index }}.txt \
+          hashcat -m 22000 -a 3 \
+            hs/wifi-02.hc22000 \
+            "${{ matrix.prefix }}?d?d?d?d?d?d?d?d?d?d?d" \
+            -o result_${{ matrix.prefix }}.txt \
             --status --status-timer=60 \
             --potfile-disable || true
 
       - name: Ensure result exists
         run: |
-          if [ ! -f result_${{ matrix.index }}.txt ]; then
-            touch result_${{ matrix.index }}.txt
+          if [ ! -f result_${{ matrix.prefix }}.txt ]; then
+            touch result_${{ matrix.prefix }}.txt
           fi
 
       - name: Upload result
         uses: actions/upload-artifact@v4
         with:
-          name: results_round_${{ github.event.inputs.round }}_${{ matrix.index }}
-          path: result_${{ matrix.index }}.txt
+          name: results_${{ matrix.prefix }}
+          path: result_${{ matrix.prefix }}.txt
 
 
   finalize:
@@ -89,25 +59,33 @@ jobs:
       - name: Download all results
         uses: actions/download-artifact@v4
         with:
-          pattern: results_round_${{ github.event.inputs.round }}_*
+          pattern: results_*
           merge-multiple: true
 
       - name: Merge results
         run: |
           cat result_*.txt 2>/dev/null > all_results.txt || true
 
-      - name: Upload merged results
+      - name: Generate report
+        run: |
+          echo "Job count:   52" > report.txt
+          echo "Mask:        [a-zA-Z] + 11 digits" >> report.txt
+          echo "Timestamp:   $(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> report.txt
+          echo "" >> report.txt
+
+          if [ -s all_results.txt ]; then
+            echo "Status:      PASSWORD FOUND" >> report.txt
+            echo "" >> report.txt
+            echo "Passwords:" >> report.txt
+            cat all_results.txt >> report.txt
+          else
+            echo "Status:      PASSWORD NOT FOUND" >> report.txt
+            echo "" >> report.txt
+            echo "No password found in the entire mask space." >> report.txt
+          fi
+
+      - name: Upload report
         uses: actions/upload-artifact@v4
         with:
-          name: merged_round_${{ github.event.inputs.round }}
-          path: all_results.txt
-
-      - name: Trigger next round
-        if: ${{ github.event.inputs.round < 7 }}
-        uses: peter-evans/repository-dispatch@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          repository: ${{ github.repository }}
-          event-type: next-round
-          client-payload: |
-            { "round": $(( ${{ github.event.inputs.round }} + 1 )) }
+          name: report
+          path: report.txt
