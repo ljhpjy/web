@@ -4,21 +4,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  prepare:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download dictionary
-        run: |
-          wget -O dict.7z https://download.weakpass.com/wordlists/2088/all_in_one.txt.7z
-
-      - name: Upload dictionary artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: dict
-          path: dict.7z
-
   crack:
-    needs: prepare
     runs-on: ubuntu-latest
     strategy:
       max-parallel: 20
@@ -48,17 +34,16 @@ jobs:
         ]') }}
 
     steps:
-      - name: Download dictionary artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: dict
-
       - name: Install tools
         run: |
           sudo apt-get update
           sudo apt-get install -y p7zip-full hashcat
 
-      - name: Extract this job's 120M lines
+      - name: Download dictionary (45GB)
+        run: |
+          wget -O dict.7z https://download.weakpass.com/wordlists/2088/all_in_one.txt.7z
+
+      - name: Extract this job's 120M lines (streaming)
         run: |
           TOTAL_LINES=29630000000
           JOBS=256
@@ -86,7 +71,7 @@ jobs:
             echo "found=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Upload result
+      - name: Upload result if cracked
         if: steps.check.outputs.found == 'true'
         uses: actions/upload-artifact@v4
         with:
@@ -95,13 +80,13 @@ jobs:
             result.txt
             hashcat.log
 
-      - name: Stop all jobs
+      - name: Stop all jobs if cracked
         if: steps.check.outputs.found == 'true'
         run: |
           echo "Password found. Stopping all jobs."
           gh run cancel --repo $GITHUB_REPOSITORY $(gh run list --limit 100 --json databaseId -q '.[].databaseId')
 
-      - name: Delete slice
-        if: steps.check.outputs.found == 'false'
+      - name: Delete dictionary and slice to free space
         run: |
-          rm -f dict.txt
+          rm -f dict.txt || true
+          rm -f dict.7z || true
