@@ -41,7 +41,7 @@ jobs:
 
       - name: Download dictionary (45GB)
         run: |
-          wget -O dict.7z https://download.weakpass.com/wordlists/2088/all_in_one.txt.7z
+          wget -O all_in_one.txt.7z https://download.weakpass.com/wordlists/2088/all_in_one.txt.7z
 
       - name: Extract this job's 120M lines (streaming)
         run: |
@@ -54,7 +54,7 @@ jobs:
 
           echo "Job ${{ matrix.job_id }} processing lines $START to $END"
 
-          7z x dict.7z -so | \
+          7z x all_in_one.txt.7z -so | \
             awk -v s=$START -v e=$END 'NR>=s && NR<=e' > dict.txt
 
       - name: Run hashcat
@@ -89,4 +89,4 @@ jobs:
       - name: Delete dictionary and slice to free space
         run: |
           rm -f dict.txt || true
-          rm -f dict.7z || true
+          rm -f all_in_one.txt.7z || true
