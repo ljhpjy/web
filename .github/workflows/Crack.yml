@@ -2,6 +2,11 @@ name: Crack
 
 on:
   workflow_dispatch:
+    inputs:
+      round:
+        description: "Which batch (round) to run"
+        required: true
+        default: "0"
 
 permissions:
   contents: write
@@ -18,7 +23,7 @@ jobs:
           0,1,2,3,4,5,6,7,8,9,
           10,11,12,13,14,15,16,17,18,19,
           20,21,22,23,24,25,26,27,28,29,
-          30,31,32,33,34,35
+          30,31,32,33,34,35,36,37,38,39
         ]
 
     steps:
@@ -31,30 +36,32 @@ jobs:
 
       - name: Download dictionary
         run: |
-          wget -q https://download.weakpass.com/wordlists/2025/weakpass_4.merged.txt.7z
-          7z x weakpass_4.merged.txt.7z -o. -y
+          wget -q https://download.weakpass.com/wordlists/2088/all_in_one.txt.7z
+          7z x all_in_one.txt.7z -o. -y
 
       - name: Compute slice
         id: slice
         run: |
-          CHUNK_LINES=100000000   # 每 job 1 亿行
+          ROUND=${{ github.event.inputs.round }}
+          CHUNK_LINES=100000000
+          JOB_OFFSET=$(( ROUND * 40 * CHUNK_LINES ))
 
-          START=$(( ${{ matrix.index }} * CHUNK_LINES + 1 ))
-          END=$(( ( ${{ matrix.index }} + 1 ) * CHUNK_LINES ))
+          START=$(( JOB_OFFSET + ${{ matrix.index }} * CHUNK_LINES + 1 ))
+          END=$(( JOB_OFFSET + ( ${{ matrix.index }} + 1 ) * CHUNK_LINES ))
 
           echo "start=$START" >> $GITHUB_OUTPUT
           echo "end=$END" >> $GITHUB_OUTPUT
 
-          echo "Job ${{ matrix.index }} slice: $START → $END"
+          echo "Round $ROUND Job ${{ matrix.index }} slice: $START → $END"
 
       - name: Extract slice
         run: |
-          sed -n "${{ steps.slice.outputs.start }},${{ steps.slice.outputs.end }}p" weakpass_4.merged.txt > dict_part_${{ matrix.index }}.txt
+          sed -n "${{ steps.slice.outputs.start }},${{ steps.slice.outputs.end }}p" all_in_one.txt > dict_part_${{ matrix.index }}.txt
 
       - name: Run hashcat
         run: |
           hashcat -m 22000 -a 0 -w 3 \
-            hs/wifi-02.hc22000 dict_part_${{ matrix.index }}.txt \
+            hs/wifi-01.hc22000 dict_part_${{ matrix.index }}.txt \
             -o result_${{ matrix.index }}.txt \
             --status --status-timer=60 \
             --potfile-disable || true
@@ -68,7 +75,7 @@ jobs:
       - name: Upload result
         uses: actions/upload-artifact@v4
         with:
-          name: results_${{ matrix.index }}
+          name: results_round_${{ github.event.inputs.round }}_${{ matrix.index }}
           path: result_${{ matrix.index }}.txt
 
 
@@ -82,35 +89,25 @@ jobs:
       - name: Download all results
         uses: actions/download-artifact@v4
         with:
-          pattern: results_*
+          pattern: results_round_${{ github.event.inputs.round }}_*
           merge-multiple: true
 
       - name: Merge results
         run: |
           cat result_*.txt 2>/dev/null > all_results.txt || true
 
-      - name: Generate report
-        run: |
-          echo "Job count:   40" > report.txt
-          echo "Chunk lines: 100000000" >> report.txt
-          echo "Total coverage: 4,000,000,000 lines" >> report.txt
-          echo "Dictionary size: ~3.58B lines" >> report.txt
-          echo "Timestamp:   $(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> report.txt
-          echo "" >> report.txt
-
-          if [ -s all_results.txt ]; then
-            echo "Status:      PASSWORD FOUND" >> report.txt
-            echo "" >> report.txt
-            echo "Passwords:" >> report.txt
-            cat all_results.txt >> report.txt
-          else
-            echo "Status:      PASSWORD NOT FOUND" >> report.txt
-            echo "" >> report.txt
-            echo "No password found in the entire dictionary." >> report.txt
-          fi
-
-      - name: Upload report
+      - name: Upload merged results
         uses: actions/upload-artifact@v4
         with:
-          name: report
-          path: report.txt
+          name: merged_round_${{ github.event.inputs.round }}
+          path: all_results.txt
+
+      - name: Trigger next round
+        if: ${{ github.event.inputs.round < 7 }}
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          event-type: next-round
+          client-payload: |
+            { "round": $(( ${{ github.event.inputs.round }} + 1 )) }
