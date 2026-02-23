@@ -43,7 +43,7 @@ jobs:
         run: |
           wget -O all_in_one.txt.7z https://download.weakpass.com/wordlists/2088/all_in_one.txt.7z
 
-      - name: Extract this job's 120M lines (streaming)
+      - name: Extract this job's slice (streaming)
         run: |
           TOTAL_LINES=29630000000
           JOBS=256
@@ -57,15 +57,24 @@ jobs:
           7z x all_in_one.txt.7z -so | \
             awk -v s=$START -v e=$END 'NR>=s && NR<=e' > dict.txt
 
-      - name: Run hashcat
+      - name: Delete dictionary archive after slicing
         run: |
-          hashcat -m 22000 -a 0 -w 3 hs/wifi-01.hc22000 dict.txt \
-            -o result.txt --logfile=hashcat.log
+          if [ -s dict.txt ]; then
+            echo "Slice OK → deleting archive"
+            rm -f all_in_one.txt.7z
+          else
+            echo "Slice failed → keeping archive"
+          fi
+
+      - name: Run hashcat (monitor stdout only)
+        run: |
+          hashcat -m 22000 -a 0 -w 3 --status \
+            hs/wifi-01.hc22000 dict.txt -o result.txt | tee hashcat_status.txt
 
       - name: Check cracked
         id: check
         run: |
-          if grep -q ":Cracked" hashcat.log; then
+          if grep -q "Cracked" hashcat_status.txt || grep -q "Recovered........: 1/" hashcat_status.txt; then
             echo "found=true" >> $GITHUB_OUTPUT
           else
             echo "found=false" >> $GITHUB_OUTPUT
@@ -76,9 +85,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cracked_result
-          path: |
-            result.txt
-            hashcat.log
+          path: result.txt
 
       - name: Stop all jobs if cracked
         if: steps.check.outputs.found == 'true'
@@ -86,7 +93,7 @@ jobs:
           echo "Password found. Stopping all jobs."
           gh run cancel --repo $GITHUB_REPOSITORY $(gh run list --limit 100 --json databaseId -q '.[].databaseId')
 
-      - name: Delete dictionary and slice to free space
+      - name: Cleanup
         run: |
           rm -f dict.txt || true
-          rm -f all_in_one.txt.7z || true
+          rm -f hashcat_status.txt || true
