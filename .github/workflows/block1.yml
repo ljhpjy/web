@@ -1,4 +1,4 @@
-name: full-dict-200-block1
+name: full-dict-256-second-half
 
 on:
   workflow_dispatch:
@@ -24,7 +24,13 @@ jobs:
           160,161,162,163,164,165,166,167,168,169,
           170,171,172,173,174,175,176,177,178,179,
           180,181,182,183,184,185,186,187,188,189,
-          190,191,192,193,194,195,196,197,198,199
+          190,191,192,193,194,195,196,197,198,199,
+          200,201,202,203,204,205,206,207,208,209,
+          210,211,212,213,214,215,216,217,218,219,
+          220,221,222,223,224,225,226,227,228,229,
+          230,231,232,233,234,235,236,237,238,239,
+          240,241,242,243,244,245,246,247,248,249,
+          250,251,252,253,254,255
         ]
 
     steps:
@@ -36,18 +42,55 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y p7zip-full hashcat
 
-      - name: "Extract this job's slice BLOCK1 0-25"
+      - name: Download dictionary (45GB)
         run: |
-          BLOCK=$((29630000000 / 4))      # 7407500000
-          OFFSET=0                        # 第一块
-          TOTAL_LINES=$BLOCK
-          JOBS=200
+          wget -O all_in_one.txt.7z https://download.weakpass.com/wordlists/2088/all_in_one.txt.7z
+
+      - name: Extract this job's slice (SECOND HALF)
+        run: |
+          HALF=$((29630000000 / 2))          # 偏移到后半部分
+          TOTAL_LINES=$HALF                  # 每半部分的行数
+          JOBS=256
           LINES_PER_JOB=$(( (TOTAL_LINES + JOBS - 1) / JOBS ))
 
-          START=$(( OFFSET + ${{ matrix.job_id }} * LINES_PER_JOB + 1 ))
-          END=$(( OFFSET + (${{ matrix.job_id }} + 1) * LINES_PER_JOB ))
+          START=$(( HALF + ${{ matrix.job_id }} * LINES_PER_JOB + 1 ))
+          END=$(( HALF + (${{ matrix.job_id }} + 1) * LINES_PER_JOB ))
 
-          echo "Job ${{ matrix.job_id }} processing BLOCK1 lines $START to $END"
+          echo "Job ${{ matrix.job_id }} processing SECOND HALF lines $START to $END"
 
           7z x all_in_one.txt.7z -so | \
             awk -v s=$START -v e=$END 'NR>=s && NR<=e' > dict.txt
+
+      - name: Delete dictionary archive after slicing
+        run: |
+          if [ -s dict.txt ]; then
+            echo "Slice OK → deleting archive"
+            rm -f all_in_one.txt.7z
+          else
+            echo "Slice failed → keeping archive"
+          fi
+
+      - name: Run hashcat (monitor stdout only)
+        run: |
+          hashcat -m 22000 -a 0 -w 3 --status \
+            hs/wifi-01.hc22000 dict.txt -o result.txt | tee hashcat_status.txt
+
+      - name: Check cracked
+        id: check
+        run: |
+          if grep -q "Cracked" hashcat_status.txt || grep -q "Recovered........: 1/" hashcat_status.txt; then
+            echo "found=true" >> $GITHUB_OUTPUT
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload result if cracked
+        if: steps.check.outputs.found == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cracked_result
+          path: result.txt
+
+      - name: Cleanup
+        run: |
+          rm -f dict.txt hashcat_status.txt || true
