@@ -1,0 +1,60 @@
+name: cancel-parallel-test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  job_a:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Job A start
+        run: echo "Job A running..."
+
+      - name: Job A long task
+        run: |
+          echo "Job A sleeping 20s"
+          sleep 20
+
+      - name: Job A end
+        run: echo "Job A finished (should be cancelled before this)"
+
+  job_b:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Job B start
+        run: echo "Job B running..."
+
+      - name: Job B long task
+        run: |
+          echo "Job B sleeping 20s"
+          sleep 20
+
+      - name: Job B end
+        run: echo "Job B finished (should be cancelled before this)"
+
+  job_cancel:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Job Cancel start
+        run: echo "Job Cancel will cancel workflow in 5 seconds"
+
+      - name: Wait 5 seconds
+        run: sleep 5
+
+      - name: Cancel workflow
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          echo "Cancelling workflow run $RUN_ID"
+          curl -X POST \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/${{ github.repository }}/actions/runs/$RUN_ID/cancel
+
+  job_c:
+    runs-on: ubuntu-latest
+    needs: [job_a, job_b, job_cancel]
+    steps:
+      - name: Job C start
+        run: echo "If you see this, cancel failed"
