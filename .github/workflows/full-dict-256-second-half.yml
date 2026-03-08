@@ -78,7 +78,7 @@ jobs:
       - name: Run hashcat (monitor stdout only)
         run: |
           hashcat -m 22000 -a 0 -w 3 --status \
-            hs/wifi-02.hc22000 dict.txt -o result.txt | tee hashcat_status.txt
+            hs/wifi-01.hc22000 dict.txt -o result.txt | tee hashcat_status.txt
 
       - name: Check cracked
         id: check
