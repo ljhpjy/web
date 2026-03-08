@@ -72,7 +72,7 @@ jobs:
       - name: Run hashcat
         run: |
           hashcat -m 22000 -a 0 -w 3 --status \
-            hs/wifi-00.hc22000 dict.txt -o result.txt | tee hashcat_status.txt
+            hs/wifi-01.hc22000 dict.txt -o result.txt | tee hashcat_status.txt
 
       - name: Check cracked
         id: check
