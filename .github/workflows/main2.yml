@@ -52,7 +52,7 @@ jobs:
 
       - name: Download dictionary (45GB, accelerated)
         run: |
-          aria2c -x 16 -s 16 -k 5M \
+          aria2c -x 4 -s 4 -k 5M \
             -o all_in_one.txt.7z \
             https://download.weakpass.com/wordlists/2088/all_in_one.txt.7z
 
