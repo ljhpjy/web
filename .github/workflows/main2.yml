@@ -100,3 +100,4 @@ jobs:
       - name: Cleanup
         run: |
           rm -f dict.txt hashcat_status.txt || true
+          rm -rf ${{ github.workspace }}/*
