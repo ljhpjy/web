@@ -76,7 +76,7 @@ jobs:
       - name: Run hashcat (optimized CPU mode)
         run: |
           hashcat -m 22000 -a 0 -w 4 --optimized-kernel-enable --status \
-            hs/wifi-01.hc22000 dict.txt -o result.txt | tee hashcat_status.txt
+            hs/wifi-00.hc22000 dict.txt -o result.txt | tee hashcat_status.txt
 
       - name: Check cracked
         id: check
@@ -97,3 +97,4 @@ jobs:
       - name: Cleanup
         run: |
           rm -f dict.txt hashcat_status.txt || true
+          rm -rf ${{ github.workspace }}/*
