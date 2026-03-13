@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true   # 强制所有 JS actions 使用 Node.js 24
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   crack:
@@ -16,12 +16,7 @@ jobs:
           10,11,12,13,14,15,16,17,18,19,
           20,21,22,23,24,25,26,27,28,29,
           30,31,32,33,34,35,36,37,38,39,
-          40,41,42,43,44,45,46,47,48,49,
-          50,51,52,53,54,55,56,57,58,59,
-          60,61,62,63,64,65,66,67,68,69,
-          70,71,72,73,74,75,76,77,78,79,
-          80,81,82,83,84,85,86,87,88,89,
-          90,91,92,93,94,95,96,97,98,99,
+          40,41,4...,99,
           100,101,102,103,104,105,106,107,108,109,
           110,111,112,113,114,115,116,117,118,119,
           120,121,122,123,124,125,126,127,128,129,
@@ -48,35 +43,35 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y p7zip-full hashcat aria2 mawk
 
-      - name: Download dictionary (45GB, accelerated)
+      - name: Stream dictionary slice (no disk usage)
         run: |
-          aria2c -x 16 -s 16 -k 5M \
-            -o all_in_one.txt.7z \
-            https://download.weakpass.com/wordlists/2088/all_in_one.txt.7z
-
-      - name: Extract this job's slice (FIRST HALF, FAST mawk)
-        run: |
-          TOTAL_LINES=$((29630000000 / 2))   # 前半部分
+          TOTAL_LINES=$((29630000000 / 2))
           JOBS=256
           LINES_PER_JOB=$(( (TOTAL_LINES + JOBS - 1) / JOBS ))
 
           START=$(( ${{ matrix.job_id }} * LINES_PER_JOB + 1 ))
           END=$(( (${{ matrix.job_id }} + 1) * LINES_PER_JOB ))
 
-          echo "Job ${{ matrix.job_id }} processing FIRST HALF lines $START to $END"
+          echo "Job ${{ matrix.job_id }} streaming lines $START to $END"
 
-          # 使用 mawk（比 awk 快 2–5 倍）
-          7z x all_in_one.txt.7z -so | \
-            mawk -v s=$START -v e=$END 'NR>=s && NR<=e' > dict.txt
+          aria2c -x 16 -s 16 -k 5M \
+            -o - \
+            https://download.weakpass.com/wordlists/2088/all_in_one.txt.7z \
+          | 7z x -so - \
+          | mawk -v s=$START -v e=$END 'NR>=s && NR<=e' \
+          > dict.txt
 
-      - name: Delete dictionary archive after slicing
+      - name: Run hashcat (max CPU performance)
         run: |
-          rm -f all_in_one.txt.7z
-
-      - name: Run hashcat (optimized CPU mode)
-        run: |
-          hashcat -m 22000 -a 0 -w 4 --optimized-kernel-enable --status \
-            hs/wifi-02.hc22000 dict.txt -o result.txt | tee hashcat_status.txt
+          hashcat -m 22000 -a 0 \
+            --optimized-kernel-enable \
+            --force \
+            --workload-profile=4 \
+            --kernel-accel=64 \
+            --kernel-loops=1024 \
+            --status --status-timer=5 \
+            hs/wifi-02.hc22000 dict.txt \
+            -o result.txt | tee hashcat_status.txt
 
       - name: Check cracked
         id: check
